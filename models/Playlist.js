@@ -8,11 +8,11 @@ const playlistItemSchema = new mongoose.Schema({
     required: true
   },
   duration: {
-    type: Number, // The duration in seconds for this item
+    type: Number,
     required: true,
-    default: 10 // A sensible default duration for images
+    default: 10
   }
-}, { _id: false }); // _id: false prevents sub-documents from getting their own IDs
+}, { _id: false });
 
 const playlistSchema = new mongoose.Schema({
   name: {
@@ -21,7 +21,17 @@ const playlistSchema = new mongoose.Schema({
     trim: true,
     unique: true
   },
-  items: [playlistItemSchema] // <-- THIS IS THE CHANGE
+  
+  // --- ADD THIS NEW FIELD ---
+  orientation: {
+    type: String,
+    required: true,
+    enum: ['Landscape', 'Portrait', 'Custom'],
+    default: 'Landscape'
+  },
+  // --- END OF NEW FIELD ---
+
+  items: [playlistItemSchema]
 }, {
   timestamps: true
 });

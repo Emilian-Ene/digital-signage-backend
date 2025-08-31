@@ -3,32 +3,69 @@
 const express = require('express');
 const router = express.Router();
 const Player = require('../models/Player');
+const Playlist = require('../models/Playlist'); // For robust populate
+const Media = require('../models/Media');       // For robust populate
+
 
 // Get all players for the CMS dashboard
 router.get('/', async (req, res) => {
     try {
-        const players = await Player.find();
+        const players = await Player.find().populate({
+            path: 'assignedContent.contentId',
+            populate: {
+               path: 'items.media',
+               model: 'Media'
+            }
+        });
         res.json(players);
     } catch (error) {
         res.status(500).json({ message: 'Server Error' });
     }
 });
 
+// --- NEW ROUTE #1: GET A SINGLE PLAYER BY ID ---
+// Placed here to be found before the more generic '/pair'
+router.get('/:id', async (req, res) => {
+    try {
+        const player = await Player.findById(req.params.id)
+            .populate({
+                path: 'assignedContent.contentId',
+                model: 'Playlist',
+                populate: {
+                   path: 'items.media',
+                   model: 'Media'
+                }
+            });
+        if (!player) {
+            return res.status(404).json({ message: 'Player not found' });
+        }
+        res.json(player);
+    } catch (error) {
+        console.error(error.message);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+
 // Finalize pairing from the CMS dashboard
 router.put('/pair', async (req, res) => {
-  const { pairingCode, name, location } = req.body;
+  const { pairingCode, name } = req.body;
   if (!pairingCode || !name) {
     return res.status(400).json({ message: 'pairingCode and name are required' });
   }
   try {
     const player = await Player.findOneAndUpdate(
-      // --- CHANGED ---
       { pairingCode: pairingCode, status: 'unpaired' },
-      { $set: { name: name, location: location || '', status: 'Online' } },
+      { 
+        $set: { 
+          name: name,
+          status: 'Online'
+        },
+        $unset: { pairingCode: "" } // This is the other critical piece
+      },
       { new: true }
     );
     if (!player) {
-      // --- CHANGED ---
       return res.status(404).json({ message: 'Unpaired player with this code not found.' });
     }
     res.json({ message: 'Player paired successfully', player });
@@ -37,16 +74,34 @@ router.put('/pair', async (req, res) => {
   }
 });
 
+
 // Update a player's assignedContent from the CMS dashboard
 router.put('/:id/assign', async (req, res) => {
     const { contentType, contentId } = req.body;
-     if (!contentType || !contentId) {
-        return res.status(400).json({ message: 'contentType and contentId are required' });
+    const assignment = contentId ? { contentType, contentId } : {};
+    try {
+        const player = await Player.findByIdAndUpdate(
+            req.params.id,
+            { $set: { assignedContent: assignment } },
+            { new: true }
+        );
+        if (!player) return res.status(404).json({ message: 'Player not found' });
+        res.json(player);
+    } catch (error) {
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// --- NEW ROUTE #2: UPDATE A PLAYER'S NAME ---
+router.put('/:id', async (req, res) => {
+    const { name } = req.body;
+    if (!name) {
+      return res.status(400).json({ message: 'A name is required for the update.' });
     }
     try {
         const player = await Player.findByIdAndUpdate(
             req.params.id,
-            { $set: { assignedContent: { contentType, contentId } } },
+            { $set: { name: name } },
             { new: true }
         );
         if (!player) return res.status(404).json({ message: 'Player not found' });
