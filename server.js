@@ -23,7 +23,8 @@ app.use('/uploads', express.static('uploads'));
 const PORT = process.env.PORT || 3000;
 
 // Connect to MongoDB and Start Server
-mongoose.connect(process.env.MONGO_URI)
+const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/digital-signage';
+mongoose.connect(mongoUri)
   .then(() => {
     console.log('Successfully connected to MongoDB!');
     app.listen(PORT, () => {
