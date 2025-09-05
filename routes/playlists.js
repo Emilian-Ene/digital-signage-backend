@@ -38,12 +38,10 @@ router.get("/", async (req, res) => {
   }
 });
 
-// --- THIS IS THE MISSING ROUTE ---
 // --- READ ONE: Get a single playlist by its ID (detailed view) ---
 router.get('/:id', async (req, res) => {
     try {
         const playlist = await Playlist.findById(req.params.id)
-            // This populates the 'media' field inside each item in the 'items' array
             .populate({
                 path: 'items.media',
                 model: 'Media'
@@ -58,26 +56,49 @@ router.get('/:id', async (req, res) => {
         res.status(500).json({ message: 'Server Error' });
     }
 });
-// --- END OF MISSING ROUTE ---
 
 
-// --- UPDATE: Update a playlist's items ---
+// --- UPDATE: Update a playlist's name and/or items (NEW LOGIC) ---
 router.put("/:id", async (req, res) => {
-  const { items } = req.body;
-  if (!Array.isArray(items)) {
-    return res.status(400).json({ message: "Items must be an array" });
+  // 1. Destructure both name and items from the request body
+  const { name, items } = req.body;
+
+  // 2. Build the update object dynamically
+  const updateData = {};
+  if (name) {
+    updateData.name = name;
   }
+  if (items) {
+    // Also validate that 'items' is an array if it's provided
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ message: "Items must be an array" });
+    }
+    updateData.items = items;
+  }
+
+  // 3. Check if there's anything to update
+  if (Object.keys(updateData).length === 0) {
+    return res.status(400).json({ message: "No update data provided" });
+  }
+
   try {
     const updatedPlaylist = await Playlist.findByIdAndUpdate(
       req.params.id,
-      { items: items },
-      { new: true }
-    );
+      updateData, // 4. Use the dynamic update object here
+      { new: true, runValidators: true } // runValidators ensures the name isn't duplicated
+    ).populate({
+        path: 'items.media',
+        model: 'Media'
+    });
+    
     if (!updatedPlaylist) {
       return res.status(404).json({ message: "Playlist not found" });
     }
     res.json(updatedPlaylist);
   } catch (error) {
+     if (error.code === 11000) {
+      return res.status(400).json({ message: "A playlist with that name already exists" });
+    }
     console.error(error);
     res.status(500).json({ message: "Server Error" });
   }
