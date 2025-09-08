@@ -21,10 +21,18 @@ const mediaSchema = new mongoose.Schema({
     required: true,
     enum: ['image', 'video']
   },
-  duration: { // <-- THIS IS THE MISSING FIELD
+  duration: {
     type: Number,
-    default: 0 // Default of 0 means "loop forever" for images
+    default: 0
   },
+
+
+ folder: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Folder', // Link to Folder model
+  required: false
+},
+
   uploadedAt: {
     type: Date,
     default: Date.now

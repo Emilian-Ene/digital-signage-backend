@@ -11,6 +11,7 @@ const playerRoutes = require('./routes/players');
 const mediaRoutes = require('./routes/media');
 const playlistRoutes = require('./routes/playlists');
 const deviceRoutes = require('./routes/devices');
+const folderRoutes = require('./routes/folders'); // <-- NEW
 const Player = require('./models/Player');
 
 // Create an Express App & Middleware
@@ -39,6 +40,7 @@ app.use('/api/players', playerRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/playlists', playlistRoutes);
 app.use('/api/devices', deviceRoutes);
+app.use('/api/folders', folderRoutes); // <-- NEW
 
 // Schedule Cron Job to check for offline players
 cron.schedule('*/30 * * * * *', async () => { // <-- Change this to 30
