@@ -30,10 +30,7 @@ const upload = multer({
 // --- READ: Get all media files ---
 router.get('/', async (req, res) =>  {
   try {
-    // --- THIS IS THE CORRECTED LINE ---
-    // .populate('folder') will replace the folder ID with the full folder object.
     const mediaFiles = await Media.find().populate('folder');
-    
     res.json(mediaFiles);
   } catch (error) {
     res.status(500).json({ message: 'Server Error' });
@@ -50,25 +47,46 @@ router.get('/by-folder/:folderId', async (req, res) => {
   }
 });
 
-// --- CREATE: Upload a new media file ---
+// --- CREATE: Upload a new media file (UPDATED LOGIC) ---
+// In your routes/media.js file
+
+// --- CREATE: Upload a new media file (UPDATED WITH DEBUG LOGS) ---
 router.post('/upload', upload.single('mediaFile'), async (req, res) => {
   try {
-    const { friendlyName, duration, folder } = req.body;
+    console.log("✅ 1. Upload route started. File received:", req.file?.filename);
+
+    const { 
+      friendlyName, folder, duration, width, height, fileSize 
+    } = req.body;
+
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded.' });
     }
+    
     const newMedia = new Media({
       friendlyName: friendlyName || req.file.originalname,
       fileName: req.file.filename,
       fileUrl: `/uploads/${req.file.filename}`,
       mediaType: req.file.mimetype.startsWith('image') ? 'image' : 'video',
-      duration: req.file.mimetype.startsWith('video') ? 0 : duration || 0,
-      folder: folder || null
+      folder: folder || null,
+      duration: duration || 0,
+      width: width || 0,
+      height: height || 0,
+      fileSize: fileSize || 0
     });
+    
+    console.log("✅ 2. New media object created. Preparing to save to database...");
+
     await newMedia.save();
+    
+    // If you see this log, the save was successful.
+    console.log("✅ 3. Save successful! Sending response to browser.");
+
     res.status(201).json(newMedia);
+
   } catch (error) {
-    console.error(error);
+    // If there's an error, we'll see this log.
+    console.error("❌ ERROR during upload:", error);
     res.status(500).json({ message: 'Error uploading file' });
   }
 });

@@ -27,16 +27,20 @@ const mediaSchema = new mongoose.Schema({
   },
 
 
- folder: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: 'Folder', // Link to Folder model
-  required: false
-},
+  folder: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Folder', // Link to Folder model
+    required: false
+  },
 
   uploadedAt: {
     type: Date,
     default: Date.now
-  }
+  },
+  fileSize: { type: Number },   // In bytes
+  duration: { type: Number },   // In seconds (for videos)
+  width: { type: Number },      // In pixels
+  height: { type: Number },     // In pixels
 });
 
 const Media = mongoose.model('Media', mediaSchema);

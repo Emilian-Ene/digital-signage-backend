@@ -83,18 +83,37 @@ router.get('/:id/preview', async (req, res) => {
   }
 });
 
-// --- POST: Create a new folder ---
+// routes/folders.js
+
 router.post('/', async (req, res) => {
-  const { name, description } = req.body;
-  if (!name) {
-    return res.status(400).json({ message: 'Folder name is required.' });
-  }
   try {
-    const newFolder = new Folder({ name, description });
+    const { name, description } = req.body;
+
+    if (!name) {
+      return res.status(400).json({ message: 'Folder name is required.' });
+    }
+
+    // --- ADD THIS CHECK ---
+    // Look for an existing folder with the same name (case-insensitive)
+    const existingFolder = await Folder.findOne({ name: { $regex: `^${name}$`, $options: 'i' } });
+
+    if (existingFolder) {
+      // If found, send back a 409 Conflict error
+      return res.status(409).json({ message: `A folder named '${name}' already exists.` });
+    }
+    // --- END OF CHECK ---
+
+    const newFolder = new Folder({
+      name: name,
+      description: description || '',
+    });
+
     const savedFolder = await newFolder.save();
     res.status(201).json(savedFolder);
+
   } catch (error) {
-    res.status(500).json({ message: 'Error creating folder', error: error.message });
+    console.error('!!! ERROR CREATING FOLDER !!!:', error);
+    res.status(500).json({ message: 'Server error while creating folder.' });
   }
 });
 

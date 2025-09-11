@@ -5,6 +5,8 @@ const router = express.Router();
 const Player = require('../models/Player');
 
 // Helper function to build the final JSON for the player
+// The corrected helper function
+
 const buildPlaylistForPlayer = (content) => {
     if (content.mediaType) { 
         return {
@@ -15,15 +17,18 @@ const buildPlaylistForPlayer = (content) => {
             }]
         };
     }
+    
+    // ✅ ADD THIS .filter() STEP TO REMOVE BROKEN ITEMS
+    const validItems = content.items.filter(item => !!item.media);
+
     return {
-        items: content.items.map(item => ({
+        items: validItems.map(item => ({
             type: item.media.mediaType,
             url: `${process.env.BASE_URL}${item.media.fileUrl}`,
             duration: item.media.mediaType === 'video' ? 0 : item.duration,
         }))
     };
 };
-
 // --- The Single Endpoint for the Android App ---
 router.post('/heartbeat', async (req, res) => {
     const { deviceId, pairingCode } = req.body;

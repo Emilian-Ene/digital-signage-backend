@@ -11,12 +11,24 @@ const playerRoutes = require('./routes/players');
 const mediaRoutes = require('./routes/media');
 const playlistRoutes = require('./routes/playlists');
 const deviceRoutes = require('./routes/devices');
-const folderRoutes = require('./routes/folders'); // <-- NEW
+const folderRoutes = require('./routes/folders');
 const Player = require('./models/Player');
+// const logRoutes = require('./routes/logs');
 
-// Create an Express App & Middleware
+// Create an Express App
 const app = express();
-app.use(cors());
+
+// ✅ START: NEW CORS CONFIGURATION
+const corsOptions = {
+  origin: 'http://localhost:5173', // Explicitly allow your frontend origin
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  credentials: true,
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+// ✅ END: NEW CORS CONFIGURATION
+
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
@@ -40,17 +52,18 @@ app.use('/api/players', playerRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/playlists', playlistRoutes);
 app.use('/api/devices', deviceRoutes);
-app.use('/api/folders', folderRoutes); // <-- NEW
+app.use('/api/folders', folderRoutes);
+// app.use('/api/logs', logRoutes);
 
 // Schedule Cron Job to check for offline players
-cron.schedule('*/30 * * * * *', async () => { // <-- Change this to 30
+cron.schedule('*/30 * * * * *', async () => {
   console.log('Running cron job: Checking for offline players...');
   
-  const thirtySecondsAgo = new Date(Date.now() - 30000); // This is correct
+  const thirtySecondsAgo = new Date(Date.now() - 30000);
 
   try {
     const result = await Player.updateMany(
-      { status: 'Online', lastHeartbeat: { $lt: thirtySecondsAgo } }, // Use the 30s variable
+      { status: 'Online', lastHeartbeat: { $lt: thirtySecondsAgo } },
       { $set: { status: 'Offline' } }
     );
     if (result.modifiedCount > 0) {
