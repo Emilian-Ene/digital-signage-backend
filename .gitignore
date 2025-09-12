@@ -9,4 +9,7 @@ node_modules
 npm-debug.log*
 
 #Media
-uploads
+*.mp4
+*.jpeg
+*.jpg
+*.mov
