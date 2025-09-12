@@ -91,6 +91,35 @@ router.post('/upload', upload.single('mediaFile'), async (req, res) => {
   }
 });
 
+
+
+
+// --- MOVE: Move a media file to a folder ---
+router.put('/:id/move', async (req, res) => {
+  try {
+    const { folder } = req.body;
+    const media = await Media.findById(req.params.id);
+    if (!media) {
+      return res.status(404).json({ message: 'Media file not found' });
+    }
+    media.folder = folder || null;
+    await media.save();
+    res.json({ message: 'Media file moved successfully', media });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+
+
+
+
+
+
+
+
+
 // --- DELETE: Delete a media file ---
 router.delete('/:id', async (req, res) => {
   try {
