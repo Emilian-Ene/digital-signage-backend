@@ -13,13 +13,13 @@ const storage = multer.diskStorage({
     cb(null, 'uploads/');
   },
   filename: function (req, file, cb) {
-    cb(null, Date.now() + path.extname(file.originalname)); 
+    cb(null, Date.now() + path.extname(file.originalname));
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage,
-  fileFilter: function(req, file, cb) {
+  fileFilter: function (req, file, cb) {
     if (!file.originalname.match(/\.(jpg|jpeg|png|gif|mp4|mov|avi)$/i)) {
       return cb(new Error('Only image and video files are allowed!'), false);
     }
@@ -28,7 +28,7 @@ const upload = multer({
 });
 
 // --- READ: Get all media files ---
-router.get('/', async (req, res) =>  {
+router.get('/', async (req, res) => {
   try {
     const mediaFiles = await Media.find().populate('folder');
     res.json(mediaFiles);
@@ -55,14 +55,14 @@ router.post('/upload', upload.single('mediaFile'), async (req, res) => {
   try {
     console.log("✅ 1. Upload route started. File received:", req.file?.filename);
 
-    const { 
-      friendlyName, folder, duration, width, height, fileSize 
+    const {
+      friendlyName, folder, duration, width, height, fileSize
     } = req.body;
 
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded.' });
     }
-    
+
     const newMedia = new Media({
       friendlyName: friendlyName || req.file.originalname,
       fileName: req.file.filename,
@@ -74,11 +74,11 @@ router.post('/upload', upload.single('mediaFile'), async (req, res) => {
       height: height || 0,
       fileSize: fileSize || 0
     });
-    
+
     console.log("✅ 2. New media object created. Preparing to save to database...");
 
     await newMedia.save();
-    
+
     // If you see this log, the save was successful.
     console.log("✅ 3. Save successful! Sending response to browser.");
 
@@ -90,9 +90,6 @@ router.post('/upload', upload.single('mediaFile'), async (req, res) => {
     res.status(500).json({ message: 'Error uploading file' });
   }
 });
-
-
-
 
 // --- MOVE: Move a media file to a folder ---
 router.put('/:id/move', async (req, res) => {
@@ -110,15 +107,6 @@ router.put('/:id/move', async (req, res) => {
     res.status(500).json({ message: 'Server Error' });
   }
 });
-
-
-
-
-
-
-
-
-
 
 // --- DELETE: Delete a media file ---
 router.delete('/:id', async (req, res) => {

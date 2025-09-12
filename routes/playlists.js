@@ -111,7 +111,20 @@ router.delete("/:id", async (req, res) => {
     if (!playlist) {
       return res.status(404).json({ message: "Playlist not found" });
     }
-    res.json({ message: "Playlist deleted successfully" });
+
+    // Remove playlist assignment from all players
+    const Player = require('../models/Player');
+    await Player.updateMany(
+      {
+        'assignedContent.contentType': 'Playlist',
+        'assignedContent.contentId': req.params.id
+      },
+      {
+        $set: { assignedContent: {} }
+      }
+    );
+
+    res.json({ message: "Playlist deleted successfully and removed from all players" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server Error" });
