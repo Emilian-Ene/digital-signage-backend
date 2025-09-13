@@ -56,19 +56,19 @@ app.use('/api/folders', folderRoutes);
 // app.use('/api/logs', logRoutes);
 
 // Schedule Cron Job to check for offline players
-cron.schedule('*/10 * * * * *', async () => {
-  console.log('Running cron job: Checking for offline players...');
+cron.schedule('*/30 * * * * *', async () => {
+  console.log('Cron job: Checking for offline players...');
   
   const thirtySecondsAgo = new Date(Date.now() - 30000);
   const tenSecondsAgo = new Date(Date.now() - 10000);
 
   try {
     const result = await Player.updateMany(
-  { status: 'Online', lastHeartbeat: { $lt: tenSecondsAgo } },
+  { status: 'Online', lastHeartbeat: { $lt: thirtySecondsAgo } },
       { $set: { status: 'Offline' } }
     );
     if (result.modifiedCount > 0) {
-      console.log(`Cron job: Marked ${result.modifiedCount} player(s) as Offline.`);
+      console.log(`Cron job:${result.modifiedCount} player(s) as Offline.`);
     }
   } catch (error) {
     console.error('Error running cron job:', error);
