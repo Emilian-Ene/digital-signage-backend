@@ -18,16 +18,31 @@ const Player = require('./models/Player');
 // Create an Express App
 const app = express();
 
-// ✅ START: NEW CORS CONFIGURATION
+// ✅ START: DEV-FRIENDLY CORS CONFIGURATION
+// Allow both dev servers (5173 and 5174). In production you should
+// restrict this to your deployed frontend origin.
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174'
+];
+
 const corsOptions = {
-  origin: 'http://localhost:5173', // Explicitly allow your frontend origin
+  origin: function (origin, callback) {
+    // allow requests with no origin (like curl or server-to-server)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS policy: This origin is not allowed: ' + origin));
+    }
+  },
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
   optionsSuccessStatus: 204
 };
 
 app.use(cors(corsOptions));
-// ✅ END: NEW CORS CONFIGURATION
+// ✅ END: DEV-FRIENDLY CORS CONFIGURATION
 
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
@@ -58,18 +73,22 @@ app.use('/api/folders', folderRoutes);
 // Schedule Cron Job to check for offline players
 cron.schedule('*/30 * * * * *', async () => {
   console.log('Cron job: Checking for offline players...');
-  
   const thirtySecondsAgo = new Date(Date.now() - 30000);
-  const tenSecondsAgo = new Date(Date.now() - 10000);
 
   try {
+    // Update offline status
     const result = await Player.updateMany(
-  { status: 'Online', lastHeartbeat: { $lt: thirtySecondsAgo } },
+      { status: 'Online', lastHeartbeat: { $lt: thirtySecondsAgo } },
       { $set: { status: 'Offline' } }
     );
     if (result.modifiedCount > 0) {
-      console.log(`Cron job:${result.modifiedCount} player(s) as Offline.`);
+      console.log(`Cron job: ${result.modifiedCount} player(s) set as Offline.`);
     }
+
+    // Count online and offline players
+    const onlineCount = await Player.countDocuments({ status: 'Online' });
+    const offlineCount = await Player.countDocuments({ status: 'Offline' });
+    console.log(`Players Online: ${onlineCount}, Players Offline: ${offlineCount}`);
   } catch (error) {
     console.error('Error running cron job:', error);
   }

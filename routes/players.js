@@ -111,6 +111,11 @@ router.put('/:id/assign', async (req, res) => {
             { new: true }
         );
         if (!player) return res.status(404).json({ message: 'Player not found' });
+        if (contentType === 'Playlist' && contentId) {
+          console.log(`Player with ID ${req.params.id} assigned to playlist ID ${contentId}.`);
+        } else if (!contentId) {
+          console.log(`Player with ID ${req.params.id} assignment cleared.`);
+        }
         res.json(player);
     } catch (error) {
         res.status(500).json({ message: 'Server Error' });
@@ -129,8 +134,9 @@ router.put('/:id', async (req, res) => {
             { $set: { name: name } },
             { new: true }
         );
-        if (!player) return res.status(404).json({ message: 'Player not found' });
-        res.json(player);
+  if (!player) return res.status(404).json({ message: 'Player not found' });
+  console.log(`Player with ID ${req.params.id} renamed to '${name}'.`);
+  res.json(player);
     } catch (error) {
         res.status(500).json({ message: 'Server Error' });
     }

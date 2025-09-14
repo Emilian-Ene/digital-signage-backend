@@ -27,9 +27,19 @@ router.post("/", async (req, res) => {
 // --- READ ALL: Get all playlists (summary view) ---
 router.get("/", async (req, res) => {
   try {
-    const playlists = await Playlist.find().populate({
-        path: 'items.media',
-        model: 'Media'
+    let playlists = await Playlist.find().populate({
+      path: 'items.media',
+      model: 'Media'
+    });
+    // Filter items to only those with a valid media reference
+    playlists = playlists.map(playlist => {
+      const filteredItems = playlist.items.filter(item => item.media);
+      // Return playlist with filtered items and a valid itemCount
+      return {
+        ...playlist.toObject(),
+        items: filteredItems,
+        itemCount: filteredItems.length
+      };
     });
     res.json(playlists);
   } catch (error) {
@@ -93,6 +103,9 @@ router.put("/:id", async (req, res) => {
     
     if (!updatedPlaylist) {
       return res.status(404).json({ message: "Playlist not found" });
+    }
+    if (name) {
+      console.log(`Playlist with ID ${req.params.id} renamed to '${name}'.`);
     }
     res.json(updatedPlaylist);
   } catch (error) {

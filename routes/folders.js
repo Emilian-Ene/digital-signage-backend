@@ -1,3 +1,4 @@
+
 // routes/folders.js
 
 const express = require('express');
@@ -39,8 +40,8 @@ router.get('/', async (req, res) => {
         }
       },
       // Step 4: Sort the final list of folders by when they were created.
-      { 
-        $sort: { createdAt: -1 } 
+      {
+        $sort: { createdAt: -1 }
       }
     ]);
 
@@ -137,6 +138,28 @@ router.put('/:id', async (req, res) => {
     res.status(500).json({ message: 'Error updating folder', error: error.message });
   }
 });
+
+// --- RENAME: Rename a folder ---
+router.put('/:id/rename', async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) {
+      return res.status(400).json({ message: 'New name is required.' });
+    }
+    const folder = await Folder.findById(req.params.id);
+    if (!folder) {
+      return res.status(404).json({ message: 'Folder not found.' });
+    }
+  folder.name = name;
+  await folder.save();
+  console.log(`Folder with ID ${req.params.id} renamed to '${name}'.`);
+  res.json({ message: 'Folder renamed successfully', folder });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
 
 // --- DELETE: Delete a folder AND all media files inside it ---
 router.delete('/:id', async (req, res) => {

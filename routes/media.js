@@ -1,11 +1,33 @@
 // routes/media.js
 
+
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const Media = require('../models/Media');
+
+// --- RENAME: Rename a media file ---
+router.put('/:id/rename', async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) {
+      return res.status(400).json({ message: 'New name is required.' });
+    }
+    const media = await Media.findById(req.params.id);
+    if (!media) {
+      return res.status(404).json({ message: 'Media file not found.' });
+    }
+  media.friendlyName = name;
+  await media.save();
+  console.log(`Media file with ID ${req.params.id} renamed to '${name}'.`);
+  res.json({ message: 'Media file renamed successfully', media });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
 
 // --- Multer Configuration ---
 const storage = multer.diskStorage({
@@ -107,6 +129,27 @@ router.put('/:id/move', async (req, res) => {
     res.status(500).json({ message: 'Server Error' });
   }
 });
+
+// --- RENAME: Rename a media file ---
+router.put('/:id/rename', async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) {
+      return res.status(400).json({ message: 'New name is required.' });
+    }
+    const media = await Media.findById(req.params.id);
+    if (!media) {
+      return res.status(404).json({ message: 'Media file not found.' });
+    }
+    media.friendlyName = name;
+    await media.save();
+    res.json({ message: 'Media file renamed successfully', media });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
 
 // --- DELETE: Delete a media file ---
 router.delete('/:id', async (req, res) => {
