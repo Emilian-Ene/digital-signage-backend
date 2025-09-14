@@ -13,7 +13,7 @@ const playlistRoutes = require('./routes/playlists');
 const deviceRoutes = require('./routes/devices');
 const folderRoutes = require('./routes/folders');
 const Player = require('./models/Player');
-// const logRoutes = require('./routes/logs');
+const logRoutes = require('./routes/logs');
 
 // Create an Express App
 const app = express();
@@ -68,7 +68,7 @@ app.use('/api/media', mediaRoutes);
 app.use('/api/playlists', playlistRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/folders', folderRoutes);
-// app.use('/api/logs', logRoutes);
+app.use('/api/logs', logRoutes);
 
 // Schedule Cron Job to check for offline players
 cron.schedule('*/30 * * * * *', async () => {
