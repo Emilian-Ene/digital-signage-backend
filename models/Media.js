@@ -1,5 +1,4 @@
 // models/Media.js
-
 const mongoose = require('mongoose');
 
 const mediaSchema = new mongoose.Schema({
@@ -21,28 +20,37 @@ const mediaSchema = new mongoose.Schema({
     required: true,
     enum: ['image', 'video']
   },
+
+  // Duration in seconds (images typically use a fixed duration; videos can be 0 to auto-play full)
   duration: {
     type: Number,
     default: 0
   },
 
-
   folder: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Folder', // Link to Folder model
-    required: false
+    ref: 'Folder',
+    required: false,
+    default: null
   },
 
+  // For preview and sorting
   uploadedAt: {
     type: Date,
     default: Date.now
   },
-  fileSize: { type: Number },   // In bytes
-  duration: { type: Number },   // In seconds (for videos)
-  width: { type: Number },      // In pixels
-  height: { type: Number },     // In pixels
+
+  // Extra properties (ensure numbers)
+  fileSize: { type: Number, default: 0 }, // bytes
+  width: { type: Number, default: 0 },    // px
+  height: { type: Number, default: 0 }    // px
 });
 
-const Media = mongoose.model('Media', mediaSchema);
+// Helpful indexes
+mediaSchema.index({ folder: 1 });
+mediaSchema.index({ uploadedAt: -1 });
+// Optional:
+// mediaSchema.index({ mediaType: 1 });
+// mediaSchema.index({ friendlyName: 1 });
 
-module.exports = Media;
+module.exports = mongoose.model('Media', mediaSchema);

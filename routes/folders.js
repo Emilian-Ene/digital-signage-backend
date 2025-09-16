@@ -12,61 +12,71 @@ const path = require('path');
 // THIS IS THE NEW, CORRECTED VERSION
 router.get('/', async (req, res) => {
   try {
-    const foldersWithPreviews = await Folder.aggregate([
-      {
-        // Step 1: Join the 'folders' collection with the 'media' collection.
-        $lookup: {
-          from: 'media', // The name of your media collection
+    const folders = await Folder.aggregate([
+      // latest media as preview
+      { $lookup: {
+          from: 'media',
           localField: '_id',
           foreignField: 'folder',
-          // Use a sub-pipeline to sort media for each folder and get only the newest one
+          pipeline: [{ $sort: { uploadedAt: -1 } }, { $limit: 1 }],
+          as: 'preview'
+      }},
+      { $addFields: { previewItem: { $arrayElemAt: ['$preview', 0] } } },
+      { $project: { preview: 0 } },
+      // stats per folder
+      { $lookup: {
+          from: 'media',
+          let: { folderId: '$_id' },
           pipeline: [
-            { $sort: { uploadedAt: -1 } }, // Sort by most recent
-            { $limit: 1 }                  // Take only the first one
+            { $match: { $expr: { $eq: ['$folder', '$$folderId'] } } },
+            { $group: {
+                _id: null,
+                totalSize: { $sum: { $ifNull: ['$fileSize', 0] } },
+                totalDuration: { $sum: { $ifNull: ['$duration', 0] } },
+                itemsCount: { $sum: 1 }
+            }}
           ],
-          as: 'preview' // Name the temporary array 'preview'
-        }
-      },
-      {
-        // Step 2: The result of the lookup is an array. Get the first (and only) element.
-        $addFields: {
-          previewItem: { $arrayElemAt: ['$preview', 0] }
-        }
-      },
-      {
-        // Step 3: Clean up the temporary 'preview' field from the final result.
-        $project: {
-          preview: 0
-        }
-      },
-      // Step 4: Sort the final list of folders by when they were created.
-      {
-        $sort: { createdAt: -1 }
-      }
+          as: 'stats'
+      }},
+      { $addFields: {
+          totalSize: { $ifNull: [{ $arrayElemAt: ['$stats.totalSize', 0] }, 0] },
+          totalDuration: { $ifNull: [{ $arrayElemAt: ['$stats.totalDuration', 0] }, 0] },
+          itemsCount: { $ifNull: [{ $arrayElemAt: ['$stats.itemsCount', 0] }, 0] }
+      }},
+      { $project: { stats: 0 } },
+      { $sort: { createdAt: -1 } }
     ]);
-
-    res.status(200).json(foldersWithPreviews);
-  } catch (error) {
-    console.error('Error fetching folders with previews:', error);
-    res.status(500).json({ message: 'Error fetching folders', error: error.message });
+    res.json(folders);
+  } catch (err) {
+    res.status(500).json({ message: 'Server Error' });
   }
 });
 
 // --- GET: Retrieve a single folder AND its media files ---
 router.get('/:id', async (req, res) => {
   try {
-    const folderId = req.params.id;
-    const folderDetails = await Folder.findById(folderId);
-    if (!folderDetails) {
-      return res.status(404).json({ message: 'Folder not found.' });
-    }
-    const mediaFiles = await Media.find({ folder: folderId }).sort({ createdAt: -1 });
-    res.status(200).json({
+    const folderDetails = await Folder.findById(req.params.id);
+    if (!folderDetails) return res.status(404).json({ message: 'Folder not found.' });
+
+    const mediaFiles = await Media.find({ folder: folderDetails._id }).sort({ createdAt: -1 });
+
+    const totals = await Media.aggregate([
+      { $match: { folder: folderDetails._id } },
+      { $group: {
+          _id: null,
+          totalSize: { $sum: { $ifNull: ['$fileSize', 0] } },
+          totalDuration: { $sum: { $ifNull: ['$duration', 0] } }
+      }}
+    ]);
+
+    res.json({
       folderDetails,
-      mediaFiles
+      mediaFiles,
+      totalSize: totals[0]?.totalSize || 0,
+      totalDuration: totals[0]?.totalDuration || 0
     });
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching folder contents', error: error.message });
+  } catch (err) {
+    res.status(500).json({ message: 'Server Error' });
   }
 });
 
@@ -84,7 +94,6 @@ router.get('/:id/preview', async (req, res) => {
   }
 });
 
-// routes/folders.js
 
 router.post('/', async (req, res) => {
   try {

@@ -71,7 +71,11 @@ router.get('/', async (req, res) => {
 // --- READ: Get media files by folder ---
 router.get('/by-folder/:folderId', async (req, res) => {
   try {
-    const mediaFiles = await Media.find({ folder: req.params.folderId });
+    const { folderId } = req.params;
+    if (!isValidObjectId(folderId)) {
+      return res.status(400).json({ message: 'Invalid folder id' });
+    }
+    const mediaFiles = await Media.find({ folder: folderId });
     res.json(mediaFiles);
   } catch (error) {
     res.status(500).json({ message: 'Server Error' });
@@ -100,10 +104,10 @@ router.post('/upload', upload.single('mediaFile'), async (req, res) => {
       fileUrl: `/uploads/${req.file.filename}`,
       mediaType: req.file.mimetype.startsWith('image') ? 'image' : 'video',
       folder: folder || null,
-      duration: duration || 0,
-      width: width || 0,
-      height: height || 0,
-      fileSize: fileSize || 0
+      duration: Number(duration) || 0,
+      width: Number(width) || 0,
+      height: Number(height) || 0,
+      fileSize: Number(fileSize) || 0
     });
 
     console.log("✅ 2. New media object created. Preparing to save to database...");
@@ -151,27 +155,6 @@ router.put('/:id/move', async (req, res) => {
     return res.status(500).json({ message: 'Server Error' });
   }
 });
-
-// --- RENAME: Rename a media file ---
-router.put('/:id/rename', async (req, res) => {
-  try {
-    const { name } = req.body;
-    if (!name) {
-      return res.status(400).json({ message: 'New name is required.' });
-    }
-    const media = await Media.findById(req.params.id);
-    if (!media) {
-      return res.status(404).json({ message: 'Media file not found.' });
-    }
-    media.friendlyName = name;
-    await media.save();
-    res.json({ message: 'Media file renamed successfully', media });
-  } catch (error) {
-    console.error(error.message);
-    res.status(500).json({ message: 'Server Error' });
-  }
-});
-
 
 // --- DELETE: Delete a media file ---
 router.delete('/:id', async (req, res) => {

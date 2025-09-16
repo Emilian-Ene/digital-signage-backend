@@ -10,7 +10,8 @@ const playlistItemSchema = new mongoose.Schema({
   duration: {
     type: Number,
     required: true,
-    default: 10
+    default: 10,
+    min: 0
   }
 }, { _id: false });
 
@@ -21,20 +22,21 @@ const playlistSchema = new mongoose.Schema({
     trim: true,
     unique: true
   },
-  
-  // --- ADD THIS NEW FIELD ---
   orientation: {
     type: String,
     required: true,
     enum: ['Landscape', 'Portrait', 'Custom'],
     default: 'Landscape'
   },
-  // --- END OF NEW FIELD ---
-
-  items: [playlistItemSchema]
+  items: {
+    type: [playlistItemSchema],
+    default: []
+  }
 }, {
   timestamps: true
 });
 
-const Playlist = mongoose.model('Playlist', playlistSchema);
-module.exports = Playlist;
+// Helpful indexes
+playlistSchema.index({ updatedAt: -1 });
+
+module.exports = mongoose.model('Playlist', playlistSchema);

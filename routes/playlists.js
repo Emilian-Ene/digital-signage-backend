@@ -24,47 +24,40 @@ router.post("/", async (req, res) => {
   }
 });
 
-// --- READ ALL: Get all playlists (summary view) ---
-router.get("/", async (req, res) => {
+// --- GET: Get all playlists with enriched data ---
+router.get('/', async (req, res) => {
   try {
-    let playlists = await Playlist.find().populate({
-      path: 'items.media',
-      model: 'Media'
+    const playlists = await Playlist.find().populate({ path: 'items.media', model: 'Media' });
+    const enriched = playlists.map(p => {
+      const obj = p.toObject();
+      const items = obj.items || [];
+      obj.itemsCount = items.length;
+      obj.totalDuration = items.reduce((a, it) => a + (it?.duration || 0), 0);
+      obj.totalSize = items.reduce((a, it) => a + (it?.media?.fileSize || 0), 0);
+      return obj;
     });
-    // Filter items to only those with a valid media reference
-    playlists = playlists.map(playlist => {
-      const filteredItems = playlist.items.filter(item => item.media);
-      // Return playlist with filtered items and a valid itemCount
-      return {
-        ...playlist.toObject(),
-        items: filteredItems,
-        itemCount: filteredItems.length
-      };
-    });
-    res.json(playlists);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server Error" });
+    res.json(enriched);
+  } catch (err) {
+    res.status(500).json({ message: 'Server Error' });
   }
 });
 
-// --- READ ONE: Get a single playlist by its ID (detailed view) ---
+// GET /api/playlists/:id
 router.get('/:id', async (req, res) => {
-    try {
-        const playlist = await Playlist.findById(req.params.id)
-            .populate({
-                path: 'items.media',
-                model: 'Media'
-            });
-        
-        if (!playlist) {
-            return res.status(404).json({ message: 'Playlist not found' });
-        }
-        res.json(playlist);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Server Error' });
-    }
+  try {
+    const playlist = await Playlist.findById(req.params.id)
+      .populate({ path: 'items.media', model: 'Media' });
+    if (!playlist) return res.status(404).json({ message: 'Playlist not found' });
+
+    const obj = playlist.toObject();
+    const items = obj.items || [];
+    obj.itemsCount = items.length;
+    obj.totalDuration = items.reduce((a, it) => a + (it?.duration || 0), 0);
+    obj.totalSize = items.reduce((a, it) => a + (it?.media?.fileSize || 0), 0);
+    res.json(obj);
+  } catch (err) {
+    res.status(500).json({ message: 'Server Error' });
+  }
 });
 
 

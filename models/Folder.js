@@ -1,5 +1,4 @@
 // models/Folder.js
-
 const mongoose = require('mongoose');
 
 const folderSchema = new mongoose.Schema({
@@ -10,13 +9,21 @@ const folderSchema = new mongoose.Schema({
   },
   description: {
     type: String,
-    required: false,
-    trim: true
+    trim: true,
+    default: ''
   }
 }, {
-  timestamps: true // Automatically adds createdAt and updatedAt fields
+  timestamps: true // adds createdAt, updatedAt
 });
 
-const Folder = mongoose.model('Folder', folderSchema);
+// Helpful indexes
+folderSchema.index({ createdAt: -1 });
+folderSchema.index({ name: 1 }); // speeds lookups in POST duplicate check
 
-module.exports = Folder;
+// If you want case-insensitive unique names later (be careful with existing data):
+// folderSchema.index(
+//   { name: 1 },
+//   { unique: true, collation: { locale: 'en', strength: 2 } }
+// );
+
+module.exports = mongoose.model('Folder', folderSchema);
