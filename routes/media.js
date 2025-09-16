@@ -8,6 +8,15 @@ const path = require('path');
 const fs = require('fs');
 const Media = require('../models/Media');
 
+
+
+const mongoose = require('mongoose');
+const { isValidObjectId } = mongoose;
+const Folder = require('../models/Folder');
+
+
+
+
 // --- RENAME: Rename a media file ---
 router.put('/:id/rename', async (req, res) => {
   try {
@@ -116,17 +125,30 @@ router.post('/upload', upload.single('mediaFile'), async (req, res) => {
 // --- MOVE: Move a media file to a folder ---
 router.put('/:id/move', async (req, res) => {
   try {
-    const { folder } = req.body;
+    const { folder } = req.body; // ObjectId string or null
     const media = await Media.findById(req.params.id);
     if (!media) {
       return res.status(404).json({ message: 'Media file not found' });
     }
-    media.folder = folder || null;
+
+    if (folder) {
+      if (!isValidObjectId(folder)) {
+        return res.status(400).json({ message: 'Invalid folder id' });
+      }
+      const folderDoc = await Folder.findById(folder);
+      if (!folderDoc) {
+        return res.status(400).json({ message: 'Folder not found' });
+      }
+      media.folder = folder;
+    } else {
+      media.folder = null; // unassign from any folder
+    }
+
     await media.save();
-    res.json({ message: 'Media file moved successfully', media });
+    return res.json({ message: 'Media file moved successfully', media });
   } catch (error) {
-    console.error(error.message);
-    res.status(500).json({ message: 'Server Error' });
+    console.error('Move media error:', error);
+    return res.status(500).json({ message: 'Server Error' });
   }
 });
 
