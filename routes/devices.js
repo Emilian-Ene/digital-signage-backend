@@ -85,7 +85,7 @@ router.post('/heartbeat', async (req, res) => {
 
     if (player.assignedContent && player.assignedContent.contentId) {
       const playlistForPlayer = buildPlaylistForPlayer(player.assignedContent.contentId, baseUrl);
-      return res.json({ status: 'playing', playlist: playlistForPlayer });
+      return res.json({ status: 'playing', playlist: playlistForPlayer, rotation: Number(player.rotation || 0) });
     } else {
       return res.json({ status: 'paired_waiting', playlist: null });
     }

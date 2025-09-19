@@ -35,8 +35,8 @@ const playerSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       refPath: 'assignedContent.contentType'
     }
-  }
-});
+  },
+  rotation: { type: Number, enum: [0, 90, 180, 270], default: 0 }
+}, { timestamps: true });
  
-const Player = mongoose.model('Player', playerSchema);
-module.exports = Player;
+module.exports = mongoose.model('Player', playerSchema);

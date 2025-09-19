@@ -122,26 +122,44 @@ router.put('/:id/assign', async (req, res) => {
     }
 });
 
-// --- NEW ROUTE #2: UPDATE A PLAYER'S NAME ---
+// Update player (name, rotation, etc.)
 router.put('/:id', async (req, res) => {
-    const { name } = req.body;
-    if (!name) {
-      return res.status(400).json({ message: 'A name is required for the update.' });
+  try {
+    const { name, rotation } = req.body;
+    const updateData = {};
+    if (typeof name !== 'undefined') {
+      if (typeof name !== 'string' || name.trim().length < 1) {
+        return res.status(400).json({ message: 'Invalid name' });
+      }
+      updateData.name = name.trim();
     }
-    try {
-        const player = await Player.findByIdAndUpdate(
-            req.params.id,
-            { $set: { name: name } },
-            { new: true }
-        );
-  if (!player) return res.status(404).json({ message: 'Player not found' });
-  console.log(`Player with ID ${req.params.id} renamed to '${name}'.`);
-  res.json(player);
-    } catch (error) {
-        res.status(500).json({ message: 'Server Error' });
+    if (typeof rotation !== 'undefined') {
+      const r = Number(rotation);
+      const allowed = [0, 90, 180, 270];
+      if (!allowed.includes(r)) {
+        return res.status(400).json({ message: 'Invalid rotation' });
+      }
+      updateData.rotation = r;
     }
-});
 
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: 'No update data provided' });
+    }
+
+    const updated = await Player.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
+    if (!updated) return res.status(404).json({ message: 'Player not found' });
+    if (typeof updateData.name !== 'undefined') {
+      console.log(`Player ${req.params.id} renamed to '${updateData.name}'.`);
+    }
+    if (typeof updateData.rotation !== 'undefined') {
+      console.log(`Player ${req.params.id} rotation updated to ${updateData.rotation}°.`);
+    }
+    return res.json(updated);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server Error' });
+  }
+});
 
 // Delete a player from the CMS dashboard
 router.delete('/:id', async (req, res) => {
