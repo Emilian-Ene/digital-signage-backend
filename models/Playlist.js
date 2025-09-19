@@ -12,6 +12,12 @@ const playlistItemSchema = new mongoose.Schema({
     required: true,
     default: 10,
     min: 0
+  },
+  // Per-item display mode for rendering on players
+  displayMode: {
+    type: String,
+    enum: ['contain', 'cover', 'fill'],
+    default: 'contain'
   }
 }, { _id: false });
 

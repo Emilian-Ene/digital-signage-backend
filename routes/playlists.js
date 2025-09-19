@@ -30,7 +30,8 @@ router.get('/', async (req, res) => {
     const playlists = await Playlist.find().populate({ path: 'items.media', model: 'Media' });
     const enriched = playlists.map(p => {
       const obj = p.toObject();
-      const items = obj.items || [];
+      const items = (obj.items || []).map(it => ({ ...it, displayMode: it.displayMode || 'contain' }));
+      obj.items = items;
       obj.itemsCount = items.length;
       obj.totalDuration = items.reduce((a, it) => a + (it?.duration || 0), 0);
       obj.totalSize = items.reduce((a, it) => a + (it?.media?.fileSize || 0), 0);
@@ -50,7 +51,8 @@ router.get('/:id', async (req, res) => {
     if (!playlist) return res.status(404).json({ message: 'Playlist not found' });
 
     const obj = playlist.toObject();
-    const items = obj.items || [];
+    const items = (obj.items || []).map(it => ({ ...it, displayMode: it.displayMode || 'contain' }));
+    obj.items = items;
     obj.itemsCount = items.length;
     obj.totalDuration = items.reduce((a, it) => a + (it?.duration || 0), 0);
     obj.totalSize = items.reduce((a, it) => a + (it?.media?.fileSize || 0), 0);
@@ -63,20 +65,22 @@ router.get('/:id', async (req, res) => {
 
 // --- UPDATE: Update a playlist's name and/or items (NEW LOGIC) ---
 router.put("/:id", async (req, res) => {
-  // 1. Destructure fields from the request body
   const { name, items, orientation } = req.body;
 
-  // 2. Build the update object dynamically
   const updateData = {};
-  if (name) {
-    updateData.name = name;
-  }
+  if (name) updateData.name = name;
   if (typeof items !== 'undefined') {
-    // Validate that 'items' is an array if provided (allow empty array to clear)
     if (!Array.isArray(items)) {
       return res.status(400).json({ message: "Items must be an array" });
     }
-    updateData.items = items;
+    // Validate each item minimally
+    const allowedModes = ['contain','cover','fill'];
+    const normalized = items.map((it) => ({
+      media: it.media,
+      duration: typeof it.duration === 'number' ? it.duration : 10,
+      displayMode: it.displayMode && allowedModes.includes(it.displayMode) ? it.displayMode : 'contain'
+    }));
+    updateData.items = normalized;
   }
   if (typeof orientation !== 'undefined') {
     const allowed = ['Landscape', 'Portrait', 'Custom'];
@@ -86,7 +90,6 @@ router.put("/:id", async (req, res) => {
     updateData.orientation = orientation;
   }
 
-  // 3. Check if there's anything to update
   if (Object.keys(updateData).length === 0) {
     return res.status(400).json({ message: "No update data provided" });
   }
@@ -94,21 +97,17 @@ router.put("/:id", async (req, res) => {
   try {
     const updatedPlaylist = await Playlist.findByIdAndUpdate(
       req.params.id,
-      updateData, // 4. Use the dynamic update object here
-      { new: true, runValidators: true } // runValidators ensures the name isn't duplicated
-    ).populate({
-        path: 'items.media',
-        model: 'Media'
-    });
-    
-    if (!updatedPlaylist) {
-      return res.status(404).json({ message: "Playlist not found" });
-    }
+      updateData,
+      { new: true, runValidators: true }
+    ).populate({ path: 'items.media', model: 'Media' });
+
+    if (!updatedPlaylist) return res.status(404).json({ message: "Playlist not found" });
+
     if (name) console.log(`Playlist ${req.params.id} renamed to '${name}'.`);
     if (typeof orientation !== 'undefined') console.log(`Playlist ${req.params.id} orientation set to '${orientation}'.`);
     res.json(updatedPlaylist);
   } catch (error) {
-     if (error.code === 11000) {
+    if (error.code === 11000) {
       return res.status(400).json({ message: "A playlist with that name already exists" });
     }
     console.error(error);
