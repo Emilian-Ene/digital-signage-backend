@@ -41,12 +41,14 @@ Optional/Recommended:
 Create `.env` with at least:
 - `PORT=3000` — HTTP port
 - `MONGO_URI=mongodb://localhost:27017/pixelflow`
-- `CORS_ORIGIN=http://localhost:5173` — frontend origin (comma-separated allowed origins supported with custom logic)
+- `FRONTEND_ORIGIN=http://localhost:5173` — one or more origins allowed by CORS (comma‑separated supported)
+- `BASE_URL=http://localhost:3000` — used to build absolute media URLs in heartbeat payloads
 
 ## 4) Server (server.js)
 - Connects to MongoDB via `MONGO_URI`.
-- Configures CORS, JSON body parsing, and static serving for `/uploads`.
-- Mounts route modules under `/api/...` or `/` depending on current code (adjust frontend base URL accordingly).
+- Configures CORS using `FRONTEND_ORIGIN` (supports comma‑separated list), JSON body parsing, and static serving for `/uploads`.
+- Mounts route modules under `/api/...`.
+- Lightweight health check at `/api/health`.
 - Global error handling middleware recommended (returns `{ message, details? }`).
 
 ## 5) Data Models (Mongoose)
@@ -54,7 +56,7 @@ Create `.env` with at least:
 Key fields:
 - `name: String` (required)
 - `description: String`
-- `mediaOrder: ObjectId[]` (NEW) — order of `Media` inside the folder
+- `mediaOrder: ObjectId[]` — order of `Media` inside the folder
 - Timestamps (`createdAt`, `updatedAt`)
 
 Indexes:
@@ -72,8 +74,19 @@ Key fields (partial):
 - `width, height, fileSize`
 - Timestamps
 
-### 5.3 Player, Playlist, Schedule, ProofOfPlayLog
-Represent devices, playlist definitions, content scheduling, and proof-of-play events. Each has timestamps; playlists store item arrays with media refs.
+### 5.3 Player
+Key fields (partial):
+- `deviceId: String`, `name: String`
+- `status: 'Online' | 'Offline' | 'unpaired'`
+- `rotation: Number (0|90|180|270)` — screen rotation (NEW)
+- `assignedContent: { contentType: 'Playlist' | 'Media', contentId: ObjectId }`
+- `lastHeartbeat: Date`
+
+### 5.4 Playlist
+Key fields (partial):
+- `name: String`
+- `orientation: 'Landscape' | 'Portrait'` (for player rendering)
+- `items: [{ media: ObjectId, duration: Number, displayMode: 'contain'|'cover'|'fill' }]` (displayMode NEW)
 
 ## 6) Core Flows
 ### 6.1 File Upload (Multer)
@@ -89,7 +102,7 @@ Represent devices, playlist definitions, content scheduling, and proof-of-play e
   - `$pull` the id from previous folder’s `mediaOrder` (if any)
   - `$addToSet` to the new folder’s `mediaOrder` (if provided)
 
-### 6.3 Reorder Items Inside a Folder (NEW)
+### 6.3 Reorder Items Inside a Folder
 - Endpoint: `PUT /folders/:id/reorder`
 - Body: `{ order: string[] }` where each id is a `Media._id` belonging to that folder.
 - On success saves `folder.mediaOrder` = `order` (deduplicated, validated) and returns `{ folderId, order }`.
@@ -99,44 +112,60 @@ Represent devices, playlist definitions, content scheduling, and proof-of-play e
 - Deleting media also removes its file and pulls its id from any `mediaOrder`.
 - Deleting a folder removes all contained media and their physical files.
 
-## 7) API Overview
-Note: Paths may be mounted under `/api`. Adjust accordingly.
+## 7) API Overview (mounted under `/api`)
 
-### Folders
-- `GET /folders` — list folders with preview and stats (size, duration, count)
-- `GET /folders/:id` — folder details + ordered `mediaFiles`
-- `GET /folders/:id/preview` — most recent media for preview
-- `POST /folders` — create folder `{ name, description? }` (409 on duplicate name, case-insensitive)
-- `PUT /folders/:id` — update `{ name, description }`
-- `PUT /folders/:id/rename` — rename
-- `PUT /folders/:id/reorder` — save `{ order: string[] }` (NEW)
-- `DELETE /folders/:id` — delete folder + contained media
+### Devices
+- `POST /devices/heartbeat` — single endpoint used by the Android app
+  - Request body: `{ deviceId: string, pairingCode?: string }`
+  - Response: `{ status: 'unpaired'|'paired_waiting'|'playing', rotation: 0|90|180|270, playlist: { orientation: 'Landscape'|'Portrait', items: [{ type: 'image'|'video', url: string, duration: number, displayMode: 'contain'|'cover'|'fill' }] } | null }`
+  - Media URLs are absolute, built from `BASE_URL` + `fileUrl`.
 
-### Media
-- `GET /media` — list all media (with folder populated)
-- `GET /media/by-folder/:folderId` — list media for a folder (basic)
-- `POST /media/upload` — upload file (multer)
-- `PUT /media/:id/rename` — rename media `friendlyName`
-- `PUT /media/:id/move` — move media to folder (or root)
-- `DELETE /media/:id` — delete media + file (also pulls from `mediaOrder`)
+Example (POST /api/devices/heartbeat):
+```
+{
+  "deviceId": "abc-123"
+}
+```
+Response
+```
+{
+  "status": "playing",
+  "rotation": 0,
+  "playlist": {
+    "orientation": "Landscape",
+    "items": [
+      { "type": "image", "url": "http://localhost:3000/uploads/a.png", "duration": 10, "displayMode": "contain" }
+    ]
+  }
+}
+```
 
 ### Players
 - `GET /players` — list players
-- `GET /players/:id` — player details (lastHeartbeat used to compute online/offline)
-- `POST /players/pair` — pair a device (pairing code flow)
-- `PUT /players/:id` — update player (e.g., name)
+- `GET /players/:id` — player details
+- `POST /players/pair` — pair a device
+- `PUT /players/:id` — update player (supports `{ name?, rotation? }`) (NEW rotation)
 - `PUT /players/:id/assign` — assign content `{ contentType, contentId }`
 
 ### Playlists
-- `GET /playlists` — list playlists
-- `GET /playlists/:id` — playlist details
+- `GET /playlists` — list
+- `GET /playlists/:id` — details
 - `POST /playlists` — create
-- `PUT /playlists/:id` — update items `{ items: [{ media, duration }] }` or name
+- `PUT /playlists/:id` — update `{ name?, items?, orientation? }`; items include `displayMode`
 - `DELETE /playlists/:id` — remove
 
-### Schedules / Logs
-- `GET /schedules`, `POST /schedules`, etc.
-- `GET /logs` (proof-of-play)/other logging routes.
+### Media
+- `GET /media` — list all media (with folder populated)
+- `GET /media/by-folder/:folderId` — list media for a folder
+- `POST /media/upload` — upload file (multer)
+- `PUT /media/:id/rename` — rename media
+- `PUT /media/:id/move` — move media to folder (or root)
+- `DELETE /media/:id` — delete media + file
+
+### Folders
+- `GET /folders` — list folders with preview and stats
+- `GET /folders/:id` — folder details + ordered `mediaFiles`
+- `PUT /folders/:id/reorder` — save `{ order: string[] }`
 
 ## 8) Response & Error Conventions
 - Success: 2xx JSON payloads (objects or lists).
@@ -145,10 +174,10 @@ Note: Paths may be mounted under `/api`. Adjust accordingly.
 
 ## 9) Static Files & URLs
 - Uploaded files are available under `/uploads/<fileName>` (Express static).
-- The frontend composes absolute URLs using its configured API base (e.g., `http://localhost:3000/uploads/...`).
+- Heartbeat composes absolute URLs using `BASE_URL` (falls back to request host when unset).
 
 ## 10) Security & Ops
-- CORS: restrict to known origins via `CORS_ORIGIN`.
+- CORS: restrict to known origins via `FRONTEND_ORIGIN` (comma‑separated supported).
 - Helmet: add standard security headers.
 - Rate limiting: protect write endpoints.
 - Payload limits: size limits on `express.json()` and multer file size if necessary.
@@ -233,5 +262,9 @@ Client behavior (reference)
 - Folder cards in the UI show a preview from the first `mediaOrder` item.
 - When moving or deleting items, the order remains consistent due to the server‑side updates listed above.
 
----
-If you need OpenAPI/Swagger generation, we can add a `/docs` endpoint using `swagger-ui-express` and a YAML/JSON spec derived from the routes above.
+## 17) Recent updates (2025-09-19) — Player rotation & APK heartbeat; Playlist displayMode
+- models/Player.js: added `rotation` (Number enum 0/90/180/270, default 0).
+- models/Playlist.js: item schema now includes `displayMode` enum with default `'contain'`.
+- routes/players.js: `PUT /players/:id` accepts `{ name?, rotation? }` (no longer requires name when updating rotation).
+- routes/devices.js: `POST /devices/heartbeat` returns `{ status, rotation, playlist: { orientation, items[{ type, url, duration, displayMode }] } }`. Absolute URLs use `BASE_URL`.
+- The Android APK must apply rotation, playlist orientation, and per-item displayMode when rendering.
