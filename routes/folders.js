@@ -1,28 +1,43 @@
-
 // routes/folders.js
 
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose'); // NEW
 const Folder = require('../models/Folder');
 const Media = require('../models/Media');
 const fs = require('fs');
 const path = require('path');
 
-// --- GET: Retrieve all folders (with the most recent file as a preview) ---
-// THIS IS THE NEW, CORRECTED VERSION
+// --- GET: Retrieve all folders (with preview from first ordered item when available) ---
 router.get('/', async (req, res) => {
   try {
     const folders = await Folder.aggregate([
-      // latest media as preview
+      // compute first ordered id
+      { $addFields: { firstOrderedId: { $arrayElemAt: ['$mediaOrder', 0] } } },
+      // preview by order
+      { $lookup: {
+          from: 'media',
+          let: { foid: '$firstOrderedId' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$_id', '$$foid'] } } },
+            { $limit: 1 }
+          ],
+          as: 'orderedPreview'
+      }},
+      // fallback latest by upload time
       { $lookup: {
           from: 'media',
           localField: '_id',
           foreignField: 'folder',
           pipeline: [{ $sort: { uploadedAt: -1 } }, { $limit: 1 }],
-          as: 'preview'
+          as: 'latestPreview'
       }},
-      { $addFields: { previewItem: { $arrayElemAt: ['$preview', 0] } } },
-      { $project: { preview: 0 } },
+      { $addFields: {
+          previewItem: {
+            $ifNull: [ { $arrayElemAt: ['$orderedPreview', 0] }, { $arrayElemAt: ['$latestPreview', 0] } ]
+          }
+      }},
+      { $project: { orderedPreview: 0, latestPreview: 0, firstOrderedId: 0 } },
       // stats per folder
       { $lookup: {
           from: 'media',
@@ -52,13 +67,19 @@ router.get('/', async (req, res) => {
   }
 });
 
-// --- GET: Retrieve a single folder AND its media files ---
+// --- GET: Retrieve a single folder AND its media files (ordered by mediaOrder when present) ---
 router.get('/:id', async (req, res) => {
   try {
     const folderDetails = await Folder.findById(req.params.id);
     if (!folderDetails) return res.status(404).json({ message: 'Folder not found.' });
 
-    const mediaFiles = await Media.find({ folder: folderDetails._id }).sort({ createdAt: -1 });
+    const mediaFiles = await Media.find({ folder: folderDetails._id });
+    const order = (folderDetails.mediaOrder || []).map(id => id.toString());
+    const pos = new Map(order.map((id, i) => [id, i]));
+    const sorted = mediaFiles
+      .map(m => ({ m, i: pos.has(m._id.toString()) ? pos.get(m._id.toString()) : Number.POSITIVE_INFINITY }))
+      .sort((a, b) => a.i - b.i || (b.m.createdAt - a.m.createdAt))
+      .map(x => x.m);
 
     const totals = await Media.aggregate([
       { $match: { folder: folderDetails._id } },
@@ -71,7 +92,7 @@ router.get('/:id', async (req, res) => {
 
     res.json({
       folderDetails,
-      mediaFiles,
+      mediaFiles: sorted,
       totalSize: totals[0]?.totalSize || 0,
       totalDuration: totals[0]?.totalDuration || 0
     });
@@ -94,6 +115,32 @@ router.get('/:id/preview', async (req, res) => {
   }
 });
 
+// NEW: Save explicit order of media inside a folder
+router.put('/:id/reorder', async (req, res) => {
+  try {
+    const { order } = req.body; // array of media ids
+    if (!Array.isArray(order) || order.length === 0) {
+      return res.status(400).json({ message: 'order must be a non-empty array of mediaIds' });
+    }
+    const folder = await Folder.findById(req.params.id);
+    if (!folder) return res.status(404).json({ message: 'Folder not found.' });
+
+    const ids = order.map(id => new mongoose.Types.ObjectId(id));
+    const count = await Media.countDocuments({ _id: { $in: ids }, folder: folder._id });
+    if (count !== order.length) {
+      return res.status(400).json({ message: 'Order contains items not in this folder.' });
+    }
+
+    const seen = new Set();
+    const cleaned = order.filter(id => (seen.has(id) ? false : (seen.add(id), true)));
+
+    folder.mediaOrder = cleaned;
+    await folder.save();
+    res.json({ folderId: folder._id, order: cleaned });
+  } catch (error) {
+    res.status(500).json({ message: 'Error saving order', error: error.message });
+  }
+});
 
 router.post('/', async (req, res) => {
   try {

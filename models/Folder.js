@@ -11,7 +11,9 @@ const folderSchema = new mongoose.Schema({
     type: String,
     trim: true,
     default: ''
-  }
+  },
+  // New: persistent order of media inside this folder
+  mediaOrder: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Media' }]
 }, {
   timestamps: true // adds createdAt, updatedAt
 });

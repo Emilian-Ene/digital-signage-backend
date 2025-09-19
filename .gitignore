@@ -13,3 +13,5 @@ npm-debug.log*
 *.jpeg
 *.jpg
 *.mov
+*.png
+*.svg

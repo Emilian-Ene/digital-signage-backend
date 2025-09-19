@@ -63,20 +63,27 @@ router.get('/:id', async (req, res) => {
 
 // --- UPDATE: Update a playlist's name and/or items (NEW LOGIC) ---
 router.put("/:id", async (req, res) => {
-  // 1. Destructure both name and items from the request body
-  const { name, items } = req.body;
+  // 1. Destructure fields from the request body
+  const { name, items, orientation } = req.body;
 
   // 2. Build the update object dynamically
   const updateData = {};
   if (name) {
     updateData.name = name;
   }
-  if (items) {
-    // Also validate that 'items' is an array if it's provided
+  if (typeof items !== 'undefined') {
+    // Validate that 'items' is an array if provided (allow empty array to clear)
     if (!Array.isArray(items)) {
       return res.status(400).json({ message: "Items must be an array" });
     }
     updateData.items = items;
+  }
+  if (typeof orientation !== 'undefined') {
+    const allowed = ['Landscape', 'Portrait', 'Custom'];
+    if (!allowed.includes(orientation)) {
+      return res.status(400).json({ message: 'Invalid orientation' });
+    }
+    updateData.orientation = orientation;
   }
 
   // 3. Check if there's anything to update
@@ -97,9 +104,8 @@ router.put("/:id", async (req, res) => {
     if (!updatedPlaylist) {
       return res.status(404).json({ message: "Playlist not found" });
     }
-    if (name) {
-      console.log(`Playlist with ID ${req.params.id} renamed to '${name}'.`);
-    }
+    if (name) console.log(`Playlist ${req.params.id} renamed to '${name}'.`);
+    if (typeof orientation !== 'undefined') console.log(`Playlist ${req.params.id} orientation set to '${orientation}'.`);
     res.json(updatedPlaylist);
   } catch (error) {
      if (error.code === 11000) {

@@ -82,21 +82,42 @@ router.get('/by-folder/:folderId', async (req, res) => {
   }
 });
 
-// --- CREATE: Upload a new media file (UPDATED LOGIC) ---
-// In your routes/media.js file
+// Storage cap from env (default 5GB)
+const MAX_STORAGE_BYTES = Number(process.env.MAX_STORAGE_BYTES || 5 * 1024 * 1024 * 1024);
 
-// --- CREATE: Upload a new media file (UPDATED WITH DEBUG LOGS) ---
+// --- READ: Storage usage ---
+router.get('/storage-usage', async (req, res) => {
+  try {
+    const agg = await Media.aggregate([
+      { $group: { _id: null, used: { $sum: { $ifNull: ['$fileSize', 0] } } } }
+    ]);
+    const used = agg[0]?.used || 0;
+    res.json({ usedBytes: used, totalBytes: MAX_STORAGE_BYTES });
+  } catch (e) {
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+// --- CREATE: Upload a new media file (UPDATED WITH CAP CHECK) ---
 router.post('/upload', upload.single('mediaFile'), async (req, res) => {
   try {
-    console.log("✅ 1. Upload route started. File received:", req.file?.filename);
-
-    const {
-      friendlyName, folder, duration, width, height, fileSize
-    } = req.body;
-
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded.' });
     }
+
+    // Calculate current used storage
+    const agg = await Media.aggregate([{ $group: { _id: null, used: { $sum: { $ifNull: ['$fileSize', 0] } } } }]);
+    const used = agg[0]?.used || 0;
+    const incoming = req.file.size || Number(req.body.fileSize) || 0;
+
+    if (used + incoming > MAX_STORAGE_BYTES) {
+      // Remove just-uploaded file to avoid filling disk
+      const fp = path.join(__dirname, '..', 'uploads', req.file.filename);
+      fs.unlink(fp, () => {});
+      return res.status(413).json({ message: 'Storage limit reached. Cannot upload more media.' });
+    }
+
+    const { friendlyName, folder, duration, width, height, fileSize } = req.body;
 
     const newMedia = new Media({
       friendlyName: friendlyName || req.file.originalname,
@@ -107,21 +128,19 @@ router.post('/upload', upload.single('mediaFile'), async (req, res) => {
       duration: Number(duration) || 0,
       width: Number(width) || 0,
       height: Number(height) || 0,
-      fileSize: Number(fileSize) || 0
+      fileSize: Number(fileSize) || req.file.size || 0
     });
-
-    console.log("✅ 2. New media object created. Preparing to save to database...");
 
     await newMedia.save();
 
-    // If you see this log, the save was successful.
-    console.log("✅ 3. Save successful! Sending response to browser.");
+    // If uploaded inside a specific folder, append to the end of that folder's order
+    if (newMedia.folder) {
+      await Folder.updateOne({ _id: newMedia.folder }, { $addToSet: { mediaOrder: newMedia._id } });
+    }
 
     res.status(201).json(newMedia);
-
   } catch (error) {
-    // If there's an error, we'll see this log.
-    console.error("❌ ERROR during upload:", error);
+    console.error('❌ ERROR during upload:', error);
     res.status(500).json({ message: 'Error uploading file' });
   }
 });
@@ -135,6 +154,8 @@ router.put('/:id/move', async (req, res) => {
       return res.status(404).json({ message: 'Media file not found' });
     }
 
+    const prevFolderId = media.folder ? media.folder.toString() : null;
+
     if (folder) {
       if (!isValidObjectId(folder)) {
         return res.status(400).json({ message: 'Invalid folder id' });
@@ -143,12 +164,27 @@ router.put('/:id/move', async (req, res) => {
       if (!folderDoc) {
         return res.status(400).json({ message: 'Folder not found' });
       }
-      media.folder = folder;
+
+      // If changing folders, remove from previous order list
+      if (prevFolderId && prevFolderId !== folderDoc._id.toString()) {
+        await Folder.updateOne({ _id: prevFolderId }, { $pull: { mediaOrder: media._id } });
+      }
+
+      media.folder = folderDoc._id;
+      await media.save();
+
+      // Append to end (avoid duplicates)
+      await Folder.updateOne({ _id: folderDoc._id }, { $addToSet: { mediaOrder: media._id } });
+
     } else {
+      // unassign from any folder: remove from order list
+      if (prevFolderId) {
+        await Folder.updateOne({ _id: prevFolderId }, { $pull: { mediaOrder: media._id } });
+      }
       media.folder = null; // unassign from any folder
+      await media.save();
     }
 
-    await media.save();
     return res.json({ message: 'Media file moved successfully', media });
   } catch (error) {
     console.error('Move media error:', error);
@@ -166,6 +202,10 @@ router.delete('/:id', async (req, res) => {
     const filePath = path.join(__dirname, '..', 'uploads', media.fileName);
     fs.unlink(filePath, async (err) => {
       if (err) console.error('Error deleting physical file:', err);
+      // Also remove from any folder order
+      if (media.folder) {
+        await Folder.updateOne({ _id: media.folder }, { $pull: { mediaOrder: media._id } });
+      }
       await Media.findByIdAndDelete(req.params.id);
       res.json({ message: 'Media file deleted successfully' });
     });
